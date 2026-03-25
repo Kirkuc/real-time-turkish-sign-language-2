@@ -2,40 +2,130 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <title>İşaret dili Websocket denemesi</title>
+    <title>İşaret Dili Çevirmen - Kamera Akışı</title>
     <style>
-        body {font-family: Arial, Helvetica, sans-serif; padding: 20px;}
-        #mesajListesi {background-color: #f4f4ff; padding: 10px; border-radius: 5px; min-height: 200px;}
-        li {margin-bottom: 5px;}
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; background-color: #f0f2f5; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h2 { color: #333; text-align: center; }
+        .video-container { display: flex; flex-direction: column; align-items: center; gap: 15px; }
+        /* Aynalama efekti için transform kullanıyoruz */
+        video { border-radius: 8px; border: 2px solid #ddd; width: 100%; max-width: 600px; transform: scaleX(-1); }
+        #durum { padding: 10px 20px; border-radius: 5px; background: #e8f5e9; color: #2e7d32; font-weight: bold; text-align: center; width: 100%; max-width: 560px;}
+        .controls { display: flex; gap: 10px; margin-top: 10px; }
+        button { padding: 10px 20px; border: none; border-radius: 5px; background: #1976d2; color: white; font-size: 16px; cursor: pointer; transition: background 0.3s;}
+        button:hover { background: #1565c0; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
     </style>
 </head>
 <body>
-    <h2>Arka Yüz(Websocket) Test Ekranı</h2>
-
-    <input type="text" id="mesajKutusu" placeholder="Bir kelime yaz">
-    <button onclick="mesajGonder()">Sunucuya gönder bakalım recep</button>
-
-    <ul id="mesajListesi"></ul>
+    <div class="container">
+        <h2>Sağlık Odaklı İşaret Dili Çevirmeni</h2>
+        
+        <div class="video-container">
+            <video id="videoElement" autoplay playsinline></video>
+            <div id="durum">Kamera bekleniyor...</div>
+            <div class="controls">
+                <button id="baslatBtn" onclick="kameraBaslat()">Kamerayı Başlat</button>
+                <button id="durdurBtn" onclick="kameraDurdur()" disabled>Durdur</button>
+            </div>
+        </div>
+        <!-- Görüntüyü işlemek için gizli bir canvas -->
+        <canvas id="canvasElement" style="display:none;"></canvas>
+    </div>
 
     <script>
         const ws = new WebSocket("ws://localhost:8000/ws");
+        const video = document.getElementById('videoElement');
+        const canvas = document.getElementById('canvasElement');
+        const ctx = canvas.getContext('2d');
+        const durumDiv = document.getElementById('durum');
+        
+        let stream = null;
+        let isStreaming = false;
+        let intervalId = null;
 
-        ws.onopen = function(event) {
-            document.getElementById("mesajListesi").innerHTML += "<li>🟢 <b>Sistem:</b> Arka yüze başarıyla bağlanıldı! Hat açık.</li>";
+        ws.onopen = function() {
+            durumDiv.innerText = "Sunucuya bağlanıldı. Kamera başlatılabilir.";
+            durumDiv.style.background = "#e8f5e9";
+            durumDiv.style.color = "#2e7d32";
         };
 
         ws.onmessage = function(event) {
-            document.getElementById("mesajListesi").innerHTML += "<li>🤖 <b>Sunucu Cevabı:</b> " + event.data + "</li>";
+            try {
+                // Backend'den JSON dönmesini bekliyoruz
+                const data = JSON.parse(event.data);
+                if (data.status === "success" || data.status === "none") {
+                    durumDiv.innerText = "Sonuç: " + data.message;
+                } else if (data.error) {
+                    durumDiv.innerText = "Hata: " + data.error;
+                }
+            } catch (e) {
+                // JSON değilse normal metindir
+                console.log("Sunucudan metin:", event.data);
+            }
         };
 
-        function mesajGonder() {
-            const input = document.getElementById("mesajKutusu");
-            const mesaj = input.value;
+        ws.onclose = function() {
+            durumDiv.innerText = "Sunucu bağlantısı koptu!";
+            durumDiv.style.background = "#ffebee";
+            durumDiv.style.color = "#c62828";
+            kameraDurdur();
+        };
 
-            ws.send(mesaj);
+        async function kameraBaslat() {
+            try {
+                // Kamera çözünürlüğünü düşük tutmak bağlantı hızını artırır (640x480)
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { width: 640, height: 480 } 
+                });
+                video.srcObject = stream;
+                isStreaming = true;
+                
+                document.getElementById('baslatBtn').disabled = true;
+                document.getElementById('durdurBtn').disabled = false;
+                durumDiv.innerText = "Kamera aktif, analiz ediliyor...";
 
-            document.getElementById("mesajListesi").innerHTML += "<li>👤 <b>Sen Gönderdin:</b> " + mesaj + "</li>";
-            input.value = "";
+                // Videonun boyutlarını canvas'a eşitle ve kare gönderimini başlat
+                video.onplay = () => {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    
+                    // Saniyede ~10 kare (100ms) gönder (Gecikmeyi önlemek için makul bir ayar)
+                    intervalId = setInterval(kareGonder, 100);
+                };
+            } catch (err) {
+                console.error("Kamera hatası: ", err);
+                durumDiv.innerText = "Kameraya erişilemedi!";
+                durumDiv.style.background = "#ffebee";
+                durumDiv.style.color = "#c62828";
+            }
+        }
+
+        function kameraDurdur() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                video.srcObject = null;
+            }
+            if (intervalId) {
+                clearInterval(intervalId);
+            }
+            isStreaming = false;
+            document.getElementById('baslatBtn').disabled = false;
+            document.getElementById('durdurBtn').disabled = true;
+            durumDiv.innerText = "Kamera durduruldu.";
+        }
+
+        function kareGonder() {
+            if (!isStreaming || ws.readyState !== WebSocket.OPEN) return;
+
+            // Videodan fırlatılan kareyi oynayıp canvas'a çiz
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            // Canvas'ı Base64 JPEG formatına çevir (0.5 kalite, bant genişliğini korur)
+            const imageData = canvas.toDataURL('image/jpeg', 0.5);
+            
+            // WebSocket üzerinden backend'e gönder
+            ws.send(imageData);
         }
     </script>
 </body>
