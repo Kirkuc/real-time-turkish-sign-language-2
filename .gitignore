@@ -1,0 +1,16 @@
+# Profiling ve Derlenmiş Kodlar
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Sanal Ortam
+venv/
+env/
+ENV/
+
+# Çevresel Değişkenler
+.env
+
+# İşletim Sistemi Dosyaları
+.DS_Store
+Thumbs.db

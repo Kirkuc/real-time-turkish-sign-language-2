@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>İşaret dili Websocket denemesi</title>
+    <style>
+        body {font-family: Arial, Helvetica, sans-serif; padding: 20px;}
+        #mesajListesi {background-color: #f4f4ff; padding: 10px; border-radius: 5px; min-height: 200px;}
+        li {margin-bottom: 5px;}
+    </style>
+</head>
+<body>
+    <h2>Arka Yüz(Websocket) Test Ekranı</h2>
+
+    <input type="text" id="mesajKutusu" placeholder="Bir kelime yaz">
+    <button onclick="mesajGonder()">Sunucuya gönder bakalım recep</button>
+
+    <ul id="mesajListesi"></ul>
+
+    <script>
+        const ws = new WebSocket("ws://localhost:8000/ws");
+
+        ws.onopen = function(event) {
+            document.getElementById("mesajListesi").innerHTML += "<li>🟢 <b>Sistem:</b> Arka yüze başarıyla bağlanıldı! Hat açık.</li>";
+        };
+
+        ws.onmessage = function(event) {
+            document.getElementById("mesajListesi").innerHTML += "<li>🤖 <b>Sunucu Cevabı:</b> " + event.data + "</li>";
+        };
+
+        function mesajGonder() {
+            const input = document.getElementById("mesajKutusu");
+            const mesaj = input.value;
+
+            ws.send(mesaj);
+
+            document.getElementById("mesajListesi").innerHTML += "<li>👤 <b>Sen Gönderdin:</b> " + mesaj + "</li>";
+            input.value = "";
+        }
+    </script>
+</body>
+</html>
