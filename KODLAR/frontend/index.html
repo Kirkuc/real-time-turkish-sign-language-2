@@ -4,63 +4,213 @@
     <meta charset="UTF-8">
     <title>İşaret Dili Çevirmen - Kamera Akışı</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; background-color: #f0f2f5; }
-        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        h2 { color: #333; text-align: center; }
-        .video-container { display: flex; flex-direction: column; align-items: center; gap: 15px; }
-        /* Aynalama efekti için transform kullanıyoruz */
-        video { border-radius: 8px; border: 2px solid #ddd; width: 100%; max-width: 600px; transform: scaleX(-1); }
-        #durum { padding: 10px 20px; border-radius: 5px; background: #e8f5e9; color: #2e7d32; font-weight: bold; text-align: center; width: 100%; max-width: 560px;}
-        .controls { display: flex; gap: 10px; margin-top: 10px; }
-        button { padding: 10px 20px; border: none; border-radius: 5px; background: #1976d2; color: white; font-size: 16px; cursor: pointer; transition: background 0.3s;}
-        button:hover { background: #1565c0; }
-        button:disabled { background: #ccc; cursor: not-allowed; }
+        body {
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f2f5;
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        h2 {
+            color: #333;
+            text-align: center;
+        }
+
+        .video-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+        }
+
+        video {
+            width: 100%;
+            max-width: 640px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            transform: scaleX(-1);
+        }
+
+        .panel {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 12px;
+            width: 100%;
+            max-width: 640px;
+        }
+
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        label {
+            color: #444;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        select {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 15px;
+        }
+
+        #durum,
+        #kayitDurumu {
+            width: 100%;
+            max-width: 600px;
+            padding: 10px 20px;
+            border-radius: 5px;
+            background: #e8f5e9;
+            color: #2e7d32;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        #kayitDurumu {
+            background: #eef3ff;
+            color: #294c86;
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 10px;
+        }
+
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            background: #1976d2;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #1565c0;
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .danger {
+            background: #c62828;
+        }
+
+        .danger:hover {
+            background: #a91f1f;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h2>Sağlık Odaklı İşaret Dili Çevirmeni</h2>
-        
+        <h2>İşaret Dili Çeviri TEST</h2>
+
         <div class="video-container">
             <video id="videoElement" autoplay playsinline></video>
+
+            <div class="panel">
+                <div class="field">
+                    <label for="modSecimi">Çalışma modu</label>
+                    <select id="modSecimi">
+                        <option value="word">Kelime modu</option>
+                        <option value="letter">Harf modu</option>
+                    </select>
+                </div>
+
+                <div class="field">
+                    <label for="kelimeSecimi">Veri etiketi</label>
+                    <select id="kelimeSecimi"></select>
+                </div>
+            </div>
+
             <div id="durum">Kamera bekleniyor...</div>
+            <div id="kayitDurumu">Veri kaydı kapalı.</div>
+
             <div class="controls">
                 <button id="baslatBtn" onclick="kameraBaslat()">Kamerayı Başlat</button>
                 <button id="durdurBtn" onclick="kameraDurdur()" disabled>Durdur</button>
+                <button id="kayitBaslatBtn" onclick="veriKaydiBaslat()" disabled>Veri Kaydını Başlat</button>
+                <button id="kayitDurdurBtn" class="danger" onclick="veriKaydiDurdur()" disabled>Veri Kaydını Durdur</button>
             </div>
         </div>
-        <!-- Görüntüyü işlemek için gizli bir canvas -->
-        <canvas id="canvasElement" style="display:none;"></canvas>
+
+        <canvas id="canvasElement" style="display: none;"></canvas>
     </div>
 
     <script>
-        const ws = new WebSocket("ws://localhost:8000/ws");
-        const video = document.getElementById('videoElement');
-        const canvas = document.getElementById('canvasElement');
-        const ctx = canvas.getContext('2d');
-        const durumDiv = document.getElementById('durum');
-        
+        const protocol = window.location.protocol === "https:" ? "wss://" : "ws://";
+        const ws = new WebSocket(protocol + window.location.host + "/ws");
+        const video = document.getElementById("videoElement");
+        const canvas = document.getElementById("canvasElement");
+        const ctx = canvas.getContext("2d");
+        const durumDiv = document.getElementById("durum");
+        const kayitDurumuDiv = document.getElementById("kayitDurumu");
+        const baslatBtn = document.getElementById("baslatBtn");
+        const durdurBtn = document.getElementById("durdurBtn");
+        const kayitBaslatBtn = document.getElementById("kayitBaslatBtn");
+        const kayitDurdurBtn = document.getElementById("kayitDurdurBtn");
+        const modSecimi = document.getElementById("modSecimi");
+        const kelimeSecimi = document.getElementById("kelimeSecimi");
+
         let stream = null;
         let isStreaming = false;
         let intervalId = null;
+        let isCollecting = false;
+
+        fetch("/labels/words")
+            .then(function(response) {
+                return response.json();
+            })
+            .then(function(labels) {
+                labels.forEach(function(label) {
+                    const option = document.createElement("option");
+                    option.value = label.id;
+                    option.innerText = label.text + " (" + label.group + ")";
+                    kelimeSecimi.appendChild(option);
+                });
+            });
 
         ws.onopen = function() {
             durumDiv.innerText = "Sunucuya bağlanıldı. Kamera başlatılabilir.";
             durumDiv.style.background = "#e8f5e9";
             durumDiv.style.color = "#2e7d32";
+            sendCommand({ type: "set_mode", mode: modSecimi.value });
         };
 
         ws.onmessage = function(event) {
             try {
-                // Backend'den JSON dönmesini bekliyoruz
                 const data = JSON.parse(event.data);
+
                 if (data.status === "success" || data.status === "none") {
                     durumDiv.innerText = "Sonuç: " + data.message;
                 } else if (data.error) {
                     durumDiv.innerText = "Hata: " + data.error;
                 }
-            } catch (e) {
-                // JSON değilse normal metindir
+
+                if (data.collection_label) {
+                    kayitDurumuDiv.innerText = "Kayıt: " + data.collection_label + " | Örnek: " + data.saved_samples;
+                }
+            } catch (error) {
                 console.log("Sunucudan metin:", event.data);
             }
         };
@@ -72,29 +222,31 @@
             kameraDurdur();
         };
 
+        modSecimi.addEventListener("change", function() {
+            sendCommand({ type: "set_mode", mode: modSecimi.value });
+            veriKaydiDurdur();
+        });
+
         async function kameraBaslat() {
             try {
-                // Kamera çözünürlüğünü düşük tutmak bağlantı hızını artırır (640x480)
-                stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { width: 640, height: 480 } 
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: "user" }
                 });
+
                 video.srcObject = stream;
                 isStreaming = true;
-                
-                document.getElementById('baslatBtn').disabled = true;
-                document.getElementById('durdurBtn').disabled = false;
+                baslatBtn.disabled = true;
+                durdurBtn.disabled = false;
+                kayitBaslatBtn.disabled = false;
                 durumDiv.innerText = "Kamera aktif, analiz ediliyor...";
 
-                // Videonun boyutlarını canvas'a eşitle ve kare gönderimini başlat
-                video.onplay = () => {
+                video.onplay = function() {
                     canvas.width = video.videoWidth;
                     canvas.height = video.videoHeight;
-                    
-                    // Saniyede ~10 kare (100ms) gönder (Gecikmeyi önlemek için makul bir ayar)
                     intervalId = setInterval(kareGonder, 100);
                 };
-            } catch (err) {
-                console.error("Kamera hatası: ", err);
+            } catch (error) {
+                console.error("Kamera hatası:", error);
                 durumDiv.innerText = "Kameraya erişilemedi!";
                 durumDiv.style.background = "#ffebee";
                 durumDiv.style.color = "#c62828";
@@ -102,30 +254,66 @@
         }
 
         function kameraDurdur() {
+            veriKaydiDurdur();
+
             if (stream) {
-                stream.getTracks().forEach(track => track.stop());
+                stream.getTracks().forEach(function(track) {
+                    track.stop();
+                });
                 video.srcObject = null;
             }
+
             if (intervalId) {
                 clearInterval(intervalId);
             }
+
             isStreaming = false;
-            document.getElementById('baslatBtn').disabled = false;
-            document.getElementById('durdurBtn').disabled = true;
+            baslatBtn.disabled = false;
+            durdurBtn.disabled = true;
+            kayitBaslatBtn.disabled = true;
             durumDiv.innerText = "Kamera durduruldu.";
         }
 
-        function kareGonder() {
-            if (!isStreaming || ws.readyState !== WebSocket.OPEN) return;
+        function veriKaydiBaslat() {
+            if (modSecimi.value !== "word") {
+                kayitDurumuDiv.innerText = "Veri kaydı şu an sadece kelime modu için hazır.";
+                return;
+            }
 
-            // Videodan fırlatılan kareyi oynayıp canvas'a çiz
+            isCollecting = true;
+            kayitBaslatBtn.disabled = true;
+            kayitDurdurBtn.disabled = false;
+            kayitDurumuDiv.innerText = "Kayıt başladı: " + kelimeSecimi.value;
+            sendCommand({ type: "start_collection", label: kelimeSecimi.value });
+        }
+
+        function veriKaydiDurdur() {
+            if (!isCollecting) {
+                return;
+            }
+
+            isCollecting = false;
+            kayitBaslatBtn.disabled = !isStreaming;
+            kayitDurdurBtn.disabled = true;
+            kayitDurumuDiv.innerText = "Veri kaydı kapalı.";
+            sendCommand({ type: "stop_collection" });
+        }
+
+        function kareGonder() {
+            if (!isStreaming || ws.readyState !== WebSocket.OPEN) {
+                return;
+            }
+
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            
-            // Canvas'ı Base64 JPEG formatına çevir (0.5 kalite, bant genişliğini korur)
-            const imageData = canvas.toDataURL('image/jpeg', 0.5);
-            
-            // WebSocket üzerinden backend'e gönder
+
+            const imageData = canvas.toDataURL("image/jpeg", 0.5);
             ws.send(imageData);
+        }
+
+        function sendCommand(command) {
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify(command));
+            }
         }
     </script>
 </body>
